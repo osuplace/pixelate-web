@@ -6,6 +6,10 @@ let pixMask = null;
 const maxTileSize = 256; // size of the tiles to process
 const overlap = 4; // overlap between tiles
 
+async function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function init() {
     // fetch the pixMask image
     let response = await fetch("/pixMask.png");
@@ -37,6 +41,7 @@ async function runOneTile(data) {
 }
 
 function convertToTile(data, x, y, width, height) {
+    console.debug("Converting to tile: ", data, x, y, width, height);
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     canvas.width = width;
@@ -83,35 +88,38 @@ async function runCurrentFile() {
     let tileHeight = Math.ceil(canvas.height / verticalCount / 4) * 4 + overlap;
     if (verticalCount === 1) tileHeight = canvas.height;
 
-    const rv = document.createElement("canvas")
-    rv.width = canvas.width;
-    rv.height = canvas.height;
-    const rctx = rv.getContext("2d");
-    rctx.drawImage(canvas, 0, 0);
+    const rvCanvas = document.createElement("canvas")
+    rvCanvas.width = canvas.width;
+    rvCanvas.height = canvas.height;
+    document.body.appendChild(rvCanvas);
 
-    document.body.appendChild(rv);
+    const rvctx = rvCanvas.getContext("2d");
+    rvctx.drawImage(canvas, 0, 0); // TODO: should be done on file upload (not on run button click)
+    await sleep(100);
     console.debug(horizontalCount, verticalCount);
+
     for (let j = 0; j < verticalCount; j++) {
         for (let i = 0; i < horizontalCount; i++) {
+            console.debug(`Tile x${i}y${j}`);
             let x1 = Math.floor(i * (tileWidth - overlap));
             let y1 = Math.floor(j * (tileHeight - overlap));
             let x2 = Math.min(x1 + tileWidth, canvas.width);
             let y2 = Math.min(y1 + tileHeight, canvas.height);
             let width = x2 - x1;
             let height = y2 - y1;
+
             let tile = convertToTile(canvas, x1, y1, width, height);
-            console.debug(`Tile x${i}y${j}: `, tile);
+
             // run the model
             let output = await runOneTile(tile);
-            console.debug("Output: ", output);
-            // convert to ImageData
             let imageData = output.toImageData()
             let imageBitmap = await createImageBitmap(imageData);
             console.debug("Converted to ImageBitmap: ", imageBitmap);
             // draw the output on the canvas
             let xOffset = i === 0 ? 0 : overlap;
             let yOffset = j === 0 ? 0 : overlap;
-            rctx.drawImage(imageBitmap, xOffset, yOffset, width, height, x1 + xOffset, y1 + yOffset, width, height);
+            rvctx.drawImage(imageBitmap, xOffset, yOffset, width, height, x1 + xOffset, y1 + yOffset, width, height);
+            await sleep(10);
         }
     }
 }
