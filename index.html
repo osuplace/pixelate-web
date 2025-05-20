@@ -4,13 +4,50 @@
     <meta charset="UTF-8">
     <title>Speed fiddle</title>
     <link rel="stylesheet" href="/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.all.min.js"></script>
     <script src="/app.js"></script>
 </head>
 <body>
-<input type="file" id="imageInput" accept="image/*">
-<br>
-<button id="runButton">Run</button>
-<br>
+<div id="canvas-container">
+    <canvas id="main-canvas"></canvas>
+</div>
+<div id="controls-container">
+    <div class="control-group">
+        <label for="model-dropdown">Select model:</label>
+        <select id="model-dropdown">
+            <option value="1x_pixelate4x-v5-270k_G.onnx">Version 5 at 270k iter</option>
+            <option value="1x_pixelate4x-v5-340k_G.onnx">Version 5 at 340k iter</option>
+            <option value="1x_pixelate4x-v6-140k_G.onnx">Version 6 at 140k iter</option>
+            <option value="1x_pixelate4x-v6-180k_G.onnx" selected="selected">Version 6 at 180k iter</option>
+        </select>
+    </div>
+    <div class="control-group">
+        <label for="scale-range" for="scale-number">Output width:</label>
+        <input type="range" id="scale-range" min="0" max="100" value="50">
+        <input type="number" id="scale-number" min="0" max="100" value="50">
+    </div>
+    <div class="control-group">
+        <button id="run-button">✨ Pixelate ✨</button>
+    </div>
+    <div class="control-group">
+        <button id="download-1-button" disabled="disabled">💾 Download 1:1</button>
+    </div>
+    <div class="control-group">
+        <button id="download-4-button" disabled="disabled">💾 Download 4x</button>
+    </div>
+    <div class="control-group">
+        <button id="download-d-button" disabled="disabled" class="danger">❌ Discard</button>
+    </div>
+    <br>
+    <div class="control-group" id="warning-area">
+        <p>You should consider downloading <a href="https://chainner.app/">chaiNNer</a> to run the model offline.</p>
+    </div>
+</div>
+<div id="drag-drop-reminder">
+    <p>Drag and drop an image here to upload</p>
+    <p>or</p>
+    <p>Click to select an image from your computer</p>
+    <input type="file" id="file-input" accept="image/*"/>
+</div>
 </body>
 </html>

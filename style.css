@@ -1,0 +1,99 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+#drag-drop-reminder {
+    position: absolute;
+    top: 40%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 30px;
+    pointer-events: none;
+    text-align: center;
+}
+
+#canvas-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #f0f0f0;
+    position: relative;
+    min-height: 200px;
+    overflow: hidden;
+    transition: background-color 0.5s;
+}
+
+canvas {
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+    display: block;
+}
+
+#controls-container {
+    padding: 20px;
+    background-color: #e0e0e0;
+    border-top: 2px solid #ccc;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.control-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+select, input[type="range"], button {
+    padding: 8px 12px;
+    border: 1px solid #999;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+input[type="file"] {
+    display: none;
+}
+
+button {
+    background-color: #4CAF50;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+button.danger {
+    background-color: #f44336;
+}
+
+button:disabled,
+button[disabled]{
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+button:hover {
+    background-color: #45a049;
+}
+
+button:disabled:hover,
+button[disabled]:hover {
+    background-color: #ccc;
+}
+
+@media (max-width: 600px) {
+    #controls-container {
+        flex-direction: column;
+    }
+}
