@@ -8,6 +8,7 @@ let scaleCorrect = false;
 let downloadReady = false;
 let downloaded = false;
 let defaultWarningText = "<p>You should consider downloading <a href=\"https://chainner.app/\">chaiNNer</a> to run the model offline.</p>";
+let defaultOverlayText = "<p>Drag and drop an image here to upload</p><p>or</p><p>Click to select an image from your computer</p>";
 
 
 const maxTileSize = 392; // size of the tiles to process
@@ -24,8 +25,11 @@ async function sleep(ms) {
 }
 
 async function init() {
+    const textOverlay = document.getElementById("text-overlay")
+
     // fetch the pixMask image
     if (!pixMask) {
+        textOverlay.innerHTML = "<p>Downloading pixel mask...</p>"
         let response = await fetch("./pixMask.png");
         if (!response.ok) {
             console.error("Failed to fetch pixMask.png");
@@ -36,6 +40,7 @@ async function init() {
     }
 
     // Initialize the session
+    textOverlay.innerHTML = "<p>Loading model...</p>";
     const select = document.getElementById("model-dropdown");
     const selectedModel = select.options[select.selectedIndex].value;
     const eps = ["webnn", "webgpu", "wasm", "cpu"]
@@ -52,6 +57,7 @@ async function init() {
                 const warningArea = document.getElementById("warning-area");
                 warningArea.innerHTML = defaultWarningText;
             }
+            textOverlay.innerHTML = defaultOverlayText;
             break
         } catch (e) {
             console.error(`Failed to create session with ${ep}: ${e}`);
@@ -60,8 +66,9 @@ async function init() {
     console.debug("Session initialized");
     console.debug(session);
 
-    // warn user if not using WebGPU
-
+    if (currentFile && !filePrepared) {
+        await prepareCurrentFile();
+    }
 }
 
 async function runOneTile(data) {
@@ -87,7 +94,8 @@ function convertToTile(data, x, y, width, height) {
 }
 
 async function prepareCurrentFile() {
-    document.getElementById("drag-drop-reminder").innerHTML = ""
+    document.getElementById("text-overlay").innerHTML = ""
+    defaultOverlayText = ""
 
     if (downloadReady && !downloaded) {
         const warningArea = document.getElementById("warning-area");

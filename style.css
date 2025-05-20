@@ -10,7 +10,7 @@ body {
     flex-direction: column;
 }
 
-#drag-drop-reminder {
+#text-overlay {
     position: absolute;
     top: 40%;
     left: 50%;
