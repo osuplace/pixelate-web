@@ -26,7 +26,7 @@ async function sleep(ms) {
 async function init() {
     // fetch the pixMask image
     if (!pixMask) {
-        let response = await fetch("/pixMask.png");
+        let response = await fetch("./pixMask.png");
         if (!response.ok) {
             console.error("Failed to fetch pixMask.png");
             return;
@@ -42,7 +42,7 @@ async function init() {
 
     for (const ep of eps) {
         try {
-            session = await ort.InferenceSession.create(`models/${selectedModel}`, {
+            session = await ort.InferenceSession.create(`./models/${selectedModel}`, {
                 executionProviders: [ep],
                 graphOptimizationLevel: "all",
             });
@@ -288,6 +288,11 @@ document.addEventListener("DOMContentLoaded", async function () {
     });
     downloadDButton.addEventListener("click", async function () {
         if (!downloadReady) return;
+        const canvas = document.getElementById("main-canvas")
+        const ctx = canvas.getContext("2d");
+        ctx.font = "30px Arial";
+        ctx.fillStyle = "red";
+        ctx.fillText("Discarded", 10, 50);
         downloaded = true;
     });
 
