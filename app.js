@@ -1,3 +1,4 @@
+/* global ort */
 let session = null;
 let currentFile = null;
 let desiredWidth = 0;
@@ -7,32 +8,96 @@ let filePrepared = false;
 let scaleCorrect = false;
 let downloadReady = false;
 let downloaded = false;
-let defaultWarningText = "<p>You should consider downloading <a href=\"https://chainner.app/\">chaiNNer</a> to run the model offline.</p>";
+let running = false;
+let alreadyDownloadedModels = {}
+
+// Get the elements from the DOM
+const disclaimer = document.getElementById("disclaimer");
+const textOverlay = document.getElementById("text-overlay");
 let defaultOverlayText = "<p>Drag and drop an image here to upload</p><p>or</p><p>Click to select an image from your computer</p>";
 
+const modelDropdown = document.getElementById("model-dropdown");
+const scaleRange = document.getElementById("scale-range");
+const scaleNumber = document.getElementById("scale-number");
 
-const maxTileSize = 392; // size of the tiles to process
-const overlap = 8; // overlap between tiles
+const runButton = document.getElementById("run-button");
+const download1Button = document.getElementById("download-1-button");
+const download4Button = document.getElementById("download-4-button");
+const downloadDButton = document.getElementById("download-d-button");
+
+/** @type {HTMLCanvasElement} */
+const mainCanvas = document.getElementById("main-canvas");
+const fileInput = document.getElementById("file-input")
+const canvasContainer = document.getElementById('canvas-container');
+
+
+let maxTileSize = 392; // size of the tiles to process
+let overlap = 8; // overlap between tiles
 
 function setDownloadButtonsDisabledTo(disabled) {
-    document.getElementById("download-1-button").disabled = disabled;
-    document.getElementById("download-4-button").disabled = disabled;
-    document.getElementById("download-d-button").disabled = disabled;
+    download1Button.disabled = disabled;
+    download4Button.disabled = disabled;
+    downloadDButton.disabled = disabled;
 }
 
 async function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function init() {
-    const textOverlay = document.getElementById("text-overlay")
+class TextOverlayPercentageScheduler {
+    constructor() {
+        this.running = false;
+        this.current = 0;
+        this.speed = 0; // how long it takes for the percentage to increment
+    }
 
+    async start(currentPercentage, speed) {
+        this.current = currentPercentage;
+        this.speed = speed;
+
+        while (this.speed === 0) {
+            textOverlay.innerHTML = `<p>${this.current}%</p>`;
+            await sleep(1000)
+        }
+
+        this.running = true;
+        textOverlay.innerHTML = `<p>${this.current}%</p>`;
+
+        while (this.current < 100) {
+            await sleep(this.speed);
+            this.current += 1;
+            textOverlay.innerHTML = `<p>${this.current}%</p>`;
+            if (!this.running) {
+                textOverlay.innerHTML = ""
+                return;
+            }
+        }
+    }
+
+    async update(currentPercentage, speed) {
+        console.debug(`Updating percentage: ${currentPercentage}, Speed: ${speed}`);
+        this.current = currentPercentage;
+        this.speed = speed;
+        textOverlay.innerHTML = `<p>${this.current}%</p>`;
+        await sleep(10)
+    }
+
+    stop() {
+        this.running = false;
+        textOverlay.innerHTML = "";
+    }
+}
+
+async function init() {
     // fetch the pixMask image
     if (!pixMask) {
         textOverlay.innerHTML = "<p>Downloading pixel mask...</p>"
+        await sleep(10);
         let response = await fetch("./pixMask.png");
         if (!response.ok) {
             console.error("Failed to fetch pixMask.png");
+            textOverlay.innerHTML = "<p>Failed to download pixel mask</p>";
+            await sleep(10);
             return;
         }
         let blob = await response.blob();
@@ -41,21 +106,35 @@ async function init() {
 
     // Initialize the session
     textOverlay.innerHTML = "<p>Loading model...</p>";
-    const select = document.getElementById("model-dropdown");
-    const selectedModel = select.options[select.selectedIndex].value;
-    const eps = ["webnn", "webgpu", "wasm", "cpu"]
+    await sleep(10);
+    const selectedModel = modelDropdown.options[modelDropdown.selectedIndex].value;
+    const eps = [["webnn", "webgpu"], ["wasm"], ["cpu"]]
+
+    let modelBuffer = alreadyDownloadedModels[selectedModel];
+
+    // fetch a buffer of the model (to allow browsers to cache it)
+    if (!modelBuffer) {
+        const modelURL = `./models/${selectedModel}`;
+        const modelResponse = await fetch(modelURL, {'cache': 'force-cache'});
+        if (!modelResponse.ok) {
+            console.error(`Failed to fetch model from ${modelURL}`);
+            textOverlay.innerHTML = "<p>Failed to download model</p>";
+            await sleep(10);
+            return;
+        }
+        modelBuffer = await modelResponse.arrayBuffer();
+        alreadyDownloadedModels[selectedModel] = modelBuffer;
+    }
 
     for (const ep of eps) {
         try {
-            session = await ort.InferenceSession.create(`./models/${selectedModel}`, {
-                executionProviders: [ep],
+            session = await ort.InferenceSession.create(modelBuffer, {
+                executionProviders: [...ep],
                 graphOptimizationLevel: "all",
             });
             console.debug(`Session created with ${ep}`);
-            if (ep !== "webnn" && ep !== "webgpu") {
-                defaultWarningText = "<p>WebGPU is not supported in your browser. Please download <a href=\"https://chainner.app/\">chaiNNer</a> to run the model offline.</p>";
-                const warningArea = document.getElementById("warning-area");
-                warningArea.innerHTML = defaultWarningText;
+            if (!ep.includes("webgpu")) {
+                disclaimer.innerHTML = "<p>WebGPU is not supported in your browser. Please download <a href=\"https://chainner.app/\">chaiNNer</a> to run the model offline.</p>"
             }
             textOverlay.innerHTML = defaultOverlayText;
             break
@@ -63,6 +142,13 @@ async function init() {
             console.error(`Failed to create session with ${ep}: ${e}`);
         }
     }
+    if (!session) {
+        console.error("Failed to create session with any execution provider");
+        textOverlay.innerHTML = "<p>Failed to load model</p>";
+        await sleep(10);
+        return;
+    }
+
     console.debug("Session initialized");
     console.debug(session);
 
@@ -94,16 +180,12 @@ function convertToTile(data, x, y, width, height) {
 }
 
 async function prepareCurrentFile() {
-    document.getElementById("text-overlay").innerHTML = ""
-    defaultOverlayText = ""
-
     if (downloadReady && !downloaded) {
-        const warningArea = document.getElementById("warning-area");
-        warningArea.innerHTML = "<p>Please download the image before running another image.</p>";
+        textOverlay.innerHTML = "<p>Please download the image before running another image.</p>";
         return;
     } else {
-        const warningArea = document.getElementById("warning-area");
-        warningArea.innerHTML = defaultWarningText;
+        textOverlay.innerHTML = ""
+        defaultOverlayText = ""
     }
 
     if (!currentFile) {
@@ -127,8 +209,6 @@ async function prepareCurrentFile() {
 
     // read contents of the image and add new <img> element to the page
     const bitmap = await createImageBitmap(currentFile);
-    const scaleRange = document.getElementById("scale-range");
-    const scaleNumber = document.getElementById("scale-number");
     if (!scaleCorrect) {
         scaleRange.max = scaleNumber.max = Math.ceil(bitmap.width / 4);
         scaleRange.value = scaleNumber.value = Math.round(bitmap.width / 4)
@@ -150,7 +230,7 @@ async function prepareCurrentFile() {
     const outputScaleCtx = outputScaleCanvas.getContext("2d");
     outputScaleCtx.drawImage(offscreenCanvas, 0, 0, offscreenCanvas.width, offscreenCanvas.height, 0, 0, outputScaleCanvas.width, outputScaleCanvas.height);
 
-    const previewCanvas = document.getElementById("main-canvas")
+    const previewCanvas = mainCanvas
     previewCanvas.width = offscreenCanvas.width;
     previewCanvas.height = offscreenCanvas.height;
     const pCtx = previewCanvas.getContext("2d");
@@ -158,6 +238,7 @@ async function prepareCurrentFile() {
     pCtx.imageSmoothingEnabled = false;
     pCtx.drawImage(outputScaleCanvas, 0, 0, outputScaleCanvas.width, outputScaleCanvas.height, 0, 0, previewCanvas.width, previewCanvas.height);
     filePrepared = true;
+    runButton.disabled = false;
 }
 
 async function runCurrentFile() {
@@ -166,9 +247,25 @@ async function runCurrentFile() {
         return;
     }
 
-    const ctx = document.getElementById("main-canvas").getContext("2d");
+    if (downloadReady && !downloaded) {
+        textOverlay.innerHTML = "<p>Please download the image before running another image.</p>";
+        return;
+    }
 
+    if (running) {
+        console.warn("Already running the model");
+        return;
+    }
+
+    running = true;
+    runButton.disabled = true;
+
+    const ctx = mainCanvas.getContext("2d");
+
+    overlap = Math.round(overlap / 4) * 4; // ensure overlap is a multiple of 4
+    maxTileSize = Math.round(maxTileSize / 4) * 4; // ensure maxTileSize is a multiple of 4
     const doubleOverlap = overlap * 2;
+
     let horizontalCount = 1 + Math.ceil((offscreenCanvas.width - maxTileSize) / (maxTileSize - doubleOverlap));
     if (offscreenCanvas.width <= maxTileSize) horizontalCount = 1;
     let verticalCount = 1 + Math.ceil((offscreenCanvas.height - maxTileSize) / (maxTileSize - doubleOverlap));
@@ -178,6 +275,18 @@ async function runCurrentFile() {
     let tileHeight = Math.ceil(offscreenCanvas.height / verticalCount / 4) * 4 + doubleOverlap;
     if (verticalCount === 1) tileHeight = offscreenCanvas.height;
     console.debug(horizontalCount, verticalCount);
+
+    let totalCount = horizontalCount * verticalCount;
+    let doneCount = 0;
+    let speed = 0
+    let percentageScheduler = new TextOverlayPercentageScheduler();
+    if (totalCount !== 1) {
+        percentageScheduler.start(0, 0).catch(console.error);
+    } else {
+        textOverlay.innerHTML = "<p>Pixelating...</p>";
+        await sleep(10);
+    }
+    await sleep(10);
 
     for (let j = 0; j < verticalCount; j++) {
         for (let i = 0; i < horizontalCount; i++) {
@@ -192,7 +301,17 @@ async function runCurrentFile() {
             let tile = convertToTile(offscreenCanvas, x1, y1, width, height);
 
             // run the model
+            let startTime = Date.now();
             let output = await runOneTile(tile);
+            doneCount++;
+            let endTime = Date.now();
+            let thisSpeed = (endTime - startTime) / (1 / totalCount * 100) + 10;
+
+            speed = speed === 0 ? thisSpeed : (speed + thisSpeed) / 2;
+            if (totalCount !== 1) {
+                await percentageScheduler.update(Math.round(doneCount / totalCount * 100), speed);
+            }
+
             let imageData = output.toImageData()
             let imageBitmap = await createImageBitmap(imageData);
             console.debug("Converted to ImageBitmap: ", imageBitmap);
@@ -204,17 +323,19 @@ async function runCurrentFile() {
         }
     }
 
+    percentageScheduler.stop()
     downloadReady = true;
+    running = false;
     setDownloadButtonsDisabledTo(false);
+    textOverlay.innerHTML = ""
 }
 
 
 document.addEventListener("DOMContentLoaded", async function () {
-    document.getElementById("run-button").addEventListener("click", async function () {
+    runButton.addEventListener("click", async function () {
         await runCurrentFile();
     })
-    const fileInput = document.getElementById("file-input")
-    const canvasContainer = document.getElementById('canvas-container');
+
     canvasContainer.addEventListener('dragover', function (event) {
         event.preventDefault();
         canvasContainer.classList.add('dragover');
@@ -236,13 +357,12 @@ document.addEventListener("DOMContentLoaded", async function () {
         }
     });
     canvasContainer.addEventListener('click', function (_) {
+        if (running) return;
         if (downloadReady && !downloaded) {
-            const warningArea = document.getElementById("warning-area");
-            warningArea.innerHTML = "<p>Please download the image before running another image.</p>";
+            textOverlay.innerHTML = "<p>Please download the image before running another image.</p>";
             return;
         } else {
-            const warningArea = document.getElementById("warning-area");
-            warningArea.innerHTML = defaultWarningText;
+            textOverlay.innerHTML = defaultOverlayText;
         }
         fileInput.click();
     });
@@ -255,8 +375,6 @@ document.addEventListener("DOMContentLoaded", async function () {
             await prepareCurrentFile()
         }
     })
-    const scaleRange = document.getElementById("scale-range")
-    const scaleNumber = document.getElementById("scale-number")
     scaleRange.addEventListener("change", async function (_) {
         scaleNumber.value = scaleRange.value;
         await prepareCurrentFile()  // TODO: debounce this
@@ -266,22 +384,18 @@ document.addEventListener("DOMContentLoaded", async function () {
         await prepareCurrentFile()  // TODO: debounce this
     })
 
-    const download1Button = document.getElementById("download-1-button");
-    const download4Button = document.getElementById("download-4-button");
-    const downloadDButton = document.getElementById("download-d-button");
     setDownloadButtonsDisabledTo(true);
     download4Button.addEventListener("click", async function () {
         if (!downloadReady) return;
         const link = document.createElement("a");
         link.download = currentFile.name.replace(/\.[^/.]+$/, "") + "_4x_pixelated.png";
-        link.href = document.getElementById("main-canvas").toDataURL();
+        link.href = mainCanvas.toDataURL();
         link.click();
         downloaded = true;
     });
     download1Button.addEventListener("click", async function () {
         if (!downloadReady) return;
 
-        const mainCanvas = document.getElementById("main-canvas");
         const downscaleCanvas = document.createElement("canvas");
         downscaleCanvas.width = offscreenCanvas.width / 4;
         downscaleCanvas.height = offscreenCanvas.height / 4;
@@ -296,21 +410,23 @@ document.addEventListener("DOMContentLoaded", async function () {
     });
     downloadDButton.addEventListener("click", async function () {
         if (!downloadReady) return;
-        const canvas = document.getElementById("main-canvas")
-        const ctx = canvas.getContext("2d");
-        ctx.font = "30px Arial";
-        ctx.fillStyle = "red";
-        ctx.fillText("Discarded", 10, 50);
+        textOverlay.innerHTML = `
+<p>This image has been discarded</p>
+<p>You can now change the image or run another model</p>
+<p>Right now the image can still be downloaded</p>
+`;
         downloaded = true;
     });
 
-    document.getElementById("model-dropdown").addEventListener("change", async function (_) {
+    modelDropdown.addEventListener("change", async function (_) {
         await init();
+        if (currentFile) {
+            await prepareCurrentFile();
+        }
     })
 
     await init()
 });
-
 
 
 /* TODO:

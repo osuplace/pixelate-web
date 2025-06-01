@@ -5,7 +5,7 @@
     <title>Speed fiddle</title>
     <link rel="stylesheet" href="./style.css">
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.all.min.js"></script>
-    <script src="./app.js"></script>
+    <script src="./app.js" defer></script>
     <meta property="og:title" content="Speed Fiddle - Pixelation AI">
     <meta property="og:description" content="A web-based tool for pixelating images using custom AI models.">
     <meta property="og:type" content="website">
@@ -27,30 +27,25 @@
         </select>
     </div>
     <div class="control-group">
-        <label for="scale-range" for="scale-number">Output width:</label>
+        <label for="scale-range">Output width:</label>
         <input type="range" id="scale-range" min="0" max="100" value="50">
+        <label for="scale-number" class="hidden">Output width (direct input):</label>
         <input type="number" id="scale-number" min="0" max="100" value="50">
     </div>
     <div class="control-group">
-        <button id="run-button">✨ Pixelate ✨</button>
-    </div>
-    <div class="control-group">
+        <button id="run-button" disabled="disabled">✨ Pixelate ✨</button>
         <button id="download-1-button" disabled="disabled">💾 Download 1:1</button>
-    </div>
-    <div class="control-group">
         <button id="download-4-button" disabled="disabled">💾 Download 4x</button>
-    </div>
-    <div class="control-group">
         <button id="download-d-button" disabled="disabled" class="danger">❌ Discard</button>
     </div>
     <br>
-    <div class="control-group" id="warning-area">
+    <div class="control-group" id="disclaimer">
         <p>You should consider downloading <a href="https://chainner.app/">chaiNNer</a> to run the model offline.</p>
     </div>
 </div>
 <div id="text-overlay">
     <p>Loading...</p>
 </div>
-<input type="file" id="file-input" accept="image/*"/>
+<input type="file" id="file-input" accept="image/*" class="hidden"/>
 </body>
 </html>
