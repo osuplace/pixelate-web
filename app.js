@@ -424,8 +424,6 @@ document.addEventListener("DOMContentLoaded", async function () {
             await prepareCurrentFile();
         }
     })
-
-    await init()
 });
 
 

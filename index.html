@@ -20,10 +20,11 @@
     <div class="control-group">
         <label for="model-dropdown">Select model:</label>
         <select id="model-dropdown">
+            <option selected="selected" disabled="disabled" hidden="hidden">Select a model</option>
             <option value="1x_pixelate4x-v5-270k_G.onnx">Version 5 at 270k iter</option>
             <option value="1x_pixelate4x-v5-340k_G.onnx">Version 5 at 340k iter</option>
             <option value="1x_pixelate4x-v6-140k_G.onnx">Version 6 at 140k iter</option>
-            <option value="1x_pixelate4x-v6-180k_G.onnx" selected="selected">Version 6 at 180k iter</option>
+            <option value="1x_pixelate4x-v6-180k_G.onnx">Version 6 at 180k iter</option>
         </select>
     </div>
     <div class="control-group">
@@ -44,7 +45,7 @@
     </div>
 </div>
 <div id="text-overlay">
-    <p>Loading...</p>
+    <p>Select a model to begin</p>
 </div>
 <input type="file" id="file-input" accept="image/*" class="hidden"/>
 </body>
