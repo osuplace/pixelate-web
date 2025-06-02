@@ -10,6 +10,7 @@ let downloadReady = false;
 let downloaded = false;
 let running = false;
 let alreadyDownloadedModels = {}
+let estimatedTimePerPixel = 0;
 
 // Get the elements from the DOM
 const disclaimer = document.getElementById("disclaimer");
@@ -277,17 +278,19 @@ async function runCurrentFile() {
     console.debug(horizontalCount, verticalCount);
 
     let totalCount = horizontalCount * verticalCount;
+    let totalArea = tileWidth * tileHeight * totalCount;
     let doneCount = 0;
-    let speed = 0
+    let speed = totalArea / 100 * estimatedTimePerPixel;
     let percentageScheduler = new TextOverlayPercentageScheduler();
-    if (totalCount !== 1) {
-        percentageScheduler.start(0, 0).catch(console.error);
+    if (totalCount !== 1 || speed !== 0) {
+        percentageScheduler.start(0, speed).catch(console.error);
     } else {
         textOverlay.innerHTML = "<p>Pixelating...</p>";
         await sleep(10);
     }
     await sleep(10);
 
+    let startTime = Date.now();
     for (let j = 0; j < verticalCount; j++) {
         for (let i = 0; i < horizontalCount; i++) {
             console.debug(`Tile x${i}y${j}`);
@@ -321,6 +324,14 @@ async function runCurrentFile() {
             ctx.drawImage(imageBitmap, xOffset, yOffset, width, height, x1 + xOffset, y1 + yOffset, width, height);
             await sleep(10);
         }
+    }
+    let endTime = Date.now();
+
+    if (estimatedTimePerPixel === 0) {
+        estimatedTimePerPixel = (endTime - startTime) / totalArea;
+    } else {
+        let thisETA = (endTime - startTime) / totalArea;
+        estimatedTimePerPixel = (estimatedTimePerPixel + thisETA) / 2;
     }
 
     percentageScheduler.stop()
