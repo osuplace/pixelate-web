@@ -89,7 +89,7 @@ class TextOverlayPercentageScheduler {
     }
 }
 
-async function init() {
+async function init(userModel = null) {
     // fetch the pixMask image
     if (!pixMask) {
         textOverlay.innerHTML = "<p>Downloading pixel mask...</p>"
@@ -106,26 +106,31 @@ async function init() {
     }
 
     // Initialize the session
-    textOverlay.innerHTML = "<p>Loading model...</p>";
-    await sleep(10);
-    const selectedModel = modelDropdown.options[modelDropdown.selectedIndex].value;
-    const eps = [["webnn", "webgpu"], ["wasm"], ["cpu"]]
-
-    let modelBuffer = alreadyDownloadedModels[selectedModel];
-
-    // fetch a buffer of the model (to allow browsers to cache it)
+    let modelBuffer = userModel;
     if (!modelBuffer) {
-        const modelURL = `./models/${selectedModel}`;
-        const modelResponse = await fetch(modelURL, {'cache': 'force-cache'});
-        if (!modelResponse.ok) {
-            console.error(`Failed to fetch model from ${modelURL}`);
-            textOverlay.innerHTML = "<p>Failed to download model</p>";
-            await sleep(10);
-            return;
+        textOverlay.innerHTML = "<p>Loading model...</p>";
+        await sleep(10);
+        const selectedModel = modelDropdown.options[modelDropdown.selectedIndex].value;
+
+
+        modelBuffer = alreadyDownloadedModels[selectedModel];
+
+        // fetch a buffer of the model (to allow browsers to cache it)
+        if (!modelBuffer) {
+            const modelURL = `./models/${selectedModel}`;
+            const modelResponse = await fetch(modelURL, {'cache': 'force-cache'});
+            if (!modelResponse.ok) {
+                console.error(`Failed to fetch model from ${modelURL}`);
+                textOverlay.innerHTML = "<p>Failed to download model</p>";
+                await sleep(10);
+                return;
+            }
+            modelBuffer = await modelResponse.arrayBuffer();
+            alreadyDownloadedModels[selectedModel] = modelBuffer;
         }
-        modelBuffer = await modelResponse.arrayBuffer();
-        alreadyDownloadedModels[selectedModel] = modelBuffer;
     }
+
+    const eps = [["webnn", "webgpu"], ["wasm"], ["cpu"]];
 
     for (const ep of eps) {
         try {
@@ -341,6 +346,31 @@ async function runCurrentFile() {
     textOverlay.innerHTML = ""
 }
 
+/**
+ * @param file {File} - The file that was uploaded
+ * @returns {Promise<void>}
+ */
+async function handleFileUpload(file) {
+    if (!file) {
+        console.error("No file provided");
+        return;
+    }
+    // handle image file upload
+    if (file.type.startsWith("image/")) {
+        currentFile = file;
+        filePrepared = false;
+        scaleCorrect = false;
+        downloadReady = false;
+        downloaded = false;
+
+        await prepareCurrentFile();
+    }
+    // handle .onnx file upload
+    else if (file.name.endsWith(".onnx")) {
+        await init(await file.arrayBuffer())
+    }
+
+}
 
 document.addEventListener("DOMContentLoaded", async function () {
     runButton.addEventListener("click", async function () {
@@ -359,13 +389,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         event.preventDefault();
         canvasContainer.classList.remove('dragover');
         const files = event.dataTransfer.files;
-        if (files.length > 0) {
-            currentFile = files[0];
-            filePrepared = false;
-            scaleCorrect = false;
-            downloadReady = false;
-            await prepareCurrentFile()
-        }
+        await handleFileUpload(files[0]);
     });
     canvasContainer.addEventListener('click', function (_) {
         if (running) return;
@@ -379,12 +403,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     });
     fileInput.addEventListener("change", async function (event) {
         const files = event.target.files;
-        if (files.length > 0) {
-            currentFile = files[0];
-            filePrepared = false;
-            scaleCorrect = false;
-            await prepareCurrentFile()
-        }
+        await handleFileUpload(files[0]);
     })
     scaleRange.addEventListener("change", async function (_) {
         scaleNumber.value = scaleRange.value;
@@ -431,8 +450,11 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     modelDropdown.addEventListener("change", async function (_) {
         await init();
-        if (currentFile) {
-            await prepareCurrentFile();
+    })
+
+    window.addEventListener('beforeunload', function (event) {
+        if (running || downloadReady && !downloaded) {
+            event.preventDefault();
         }
     })
 });
