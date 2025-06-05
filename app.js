@@ -45,6 +45,11 @@ async function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function setTextOverlayInner(newHtml) {
+    textOverlay.innerHTML = newHtml;
+    await sleep(1);
+}
+
 class TextOverlayPercentageScheduler {
     constructor() {
         this.running = false;
@@ -57,19 +62,19 @@ class TextOverlayPercentageScheduler {
         this.speed = speed;
 
         while (this.speed === 0) {
-            textOverlay.innerHTML = `<p>${this.current}%</p>`;
+            await setTextOverlayInner(`<p>${this.current}%</p>`)
             await sleep(1000)
         }
 
         this.running = true;
-        textOverlay.innerHTML = `<p>${this.current}%</p>`;
+        await setTextOverlayInner(`<p>${this.current}%</p>`)
 
         while (this.current < 100) {
             await sleep(this.speed);
             this.current += 1;
-            textOverlay.innerHTML = `<p>${this.current}%</p>`;
+            await setTextOverlayInner(`<p>${this.current}%</p>`)
             if (!this.running) {
-                textOverlay.innerHTML = ""
+                await setTextOverlayInner("");
                 return;
             }
         }
@@ -79,26 +84,23 @@ class TextOverlayPercentageScheduler {
         console.debug(`Updating percentage: ${currentPercentage}, Speed: ${speed}`);
         this.current = currentPercentage;
         this.speed = speed;
-        textOverlay.innerHTML = `<p>${this.current}%</p>`;
-        await sleep(10)
+        await setTextOverlayInner(`<p>${this.current}%</p>`)
     }
 
     stop() {
         this.running = false;
-        textOverlay.innerHTML = "";
+        setTextOverlayInner("").catch(console.error);
     }
 }
 
-async function init(userModel = null) {
+async function init(userModel = null, modelName = null) {
     // fetch the pixMask image
     if (!pixMask) {
-        textOverlay.innerHTML = "<p>Downloading pixel mask...</p>"
-        await sleep(10);
+        await setTextOverlayInner("<p>Downloading pixel mask...</p>");
         let response = await fetch("./pixMask.png");
         if (!response.ok) {
             console.error("Failed to fetch pixMask.png");
-            textOverlay.innerHTML = "<p>Failed to download pixel mask</p>";
-            await sleep(10);
+            await setTextOverlayInner("<p>Failed to download pixel mask</p>");
             return;
         }
         let blob = await response.blob();
@@ -108,8 +110,7 @@ async function init(userModel = null) {
     // Initialize the session
     let modelBuffer = userModel;
     if (!modelBuffer) {
-        textOverlay.innerHTML = "<p>Loading model...</p>";
-        await sleep(10);
+        await setTextOverlayInner("<p>Downloading model...</p>");
         const selectedModel = modelDropdown.options[modelDropdown.selectedIndex].value;
 
 
@@ -121,16 +122,24 @@ async function init(userModel = null) {
             const modelResponse = await fetch(modelURL, {'cache': 'force-cache'});
             if (!modelResponse.ok) {
                 console.error(`Failed to fetch model from ${modelURL}`);
-                textOverlay.innerHTML = "<p>Failed to download model</p>";
-                await sleep(10);
+                await setTextOverlayInner("<p>Failed to download model</p>");
                 return;
             }
             modelBuffer = await modelResponse.arrayBuffer();
             alreadyDownloadedModels[selectedModel] = modelBuffer;
         }
+    } else {
+        alreadyDownloadedModels[modelName] = userModel;
+        const newOption = document.createElement("option");
+        newOption.value = modelName;
+        newOption.textContent = `Local file: ${modelName}`;
+        newOption.selected = true;
+        modelDropdown.appendChild(newOption);
     }
 
     const eps = [["webnn", "webgpu"], ["wasm"], ["cpu"]];
+
+    await setTextOverlayInner("<p>Loading model...</p>");
 
     for (const ep of eps) {
         try {
@@ -142,7 +151,7 @@ async function init(userModel = null) {
             if (!ep.includes("webgpu")) {
                 disclaimer.innerHTML = "<p>WebGPU is not supported in your browser. Please download <a href=\"https://chainner.app/\">chaiNNer</a> to run the model offline.</p>"
             }
-            textOverlay.innerHTML = defaultOverlayText;
+            await setTextOverlayInner(defaultOverlayText);
             break
         } catch (e) {
             console.error(`Failed to create session with ${ep}: ${e}`);
@@ -150,8 +159,7 @@ async function init(userModel = null) {
     }
     if (!session) {
         console.error("Failed to create session with any execution provider");
-        textOverlay.innerHTML = "<p>Failed to load model</p>";
-        await sleep(10);
+        await setTextOverlayInner("<p>Failed to load model</p>");
         return;
     }
 
@@ -187,10 +195,10 @@ function convertToTile(data, x, y, width, height) {
 
 async function prepareCurrentFile() {
     if (downloadReady && !downloaded) {
-        textOverlay.innerHTML = "<p>Please download the image before running another image.</p>";
+        await setTextOverlayInner("<p>Please download the image before running another image.</p>");
         return;
     } else {
-        textOverlay.innerHTML = ""
+        await setTextOverlayInner("");
         defaultOverlayText = ""
     }
 
@@ -254,7 +262,7 @@ async function runCurrentFile() {
     }
 
     if (downloadReady && !downloaded) {
-        textOverlay.innerHTML = "<p>Please download the image before running another image.</p>";
+        await setTextOverlayInner("<p>Please download the image before running another image.</p>");
         return;
     }
 
@@ -290,10 +298,8 @@ async function runCurrentFile() {
     if (totalCount !== 1 || speed !== 0) {
         percentageScheduler.start(0, speed).catch(console.error);
     } else {
-        textOverlay.innerHTML = "<p>Pixelating...</p>";
-        await sleep(10);
+        await setTextOverlayInner("<p>Pixelating...</p>");
     }
-    await sleep(10);
 
     let startTime = Date.now();
     for (let j = 0; j < verticalCount; j++) {
@@ -343,7 +349,7 @@ async function runCurrentFile() {
     downloadReady = true;
     running = false;
     setDownloadButtonsDisabledTo(false);
-    textOverlay.innerHTML = ""
+    await setTextOverlayInner("");
 }
 
 /**
@@ -367,7 +373,7 @@ async function handleFileUpload(file) {
     }
     // handle .onnx file upload
     else if (file.name.endsWith(".onnx")) {
-        await init(await file.arrayBuffer())
+        await init(await file.arrayBuffer(), file.name);
     }
 
 }
@@ -394,10 +400,10 @@ document.addEventListener("DOMContentLoaded", async function () {
     canvasContainer.addEventListener('click', function (_) {
         if (running) return;
         if (downloadReady && !downloaded) {
-            textOverlay.innerHTML = "<p>Please download the image before running another image.</p>";
+            setTextOverlayInner("<p>Please download the image before running another image.</p>").catch(console.error);
             return;
         } else {
-            textOverlay.innerHTML = defaultOverlayText;
+            setTextOverlayInner(defaultOverlayText).catch(console.error);
         }
         fileInput.click();
     });
@@ -440,11 +446,11 @@ document.addEventListener("DOMContentLoaded", async function () {
     });
     downloadDButton.addEventListener("click", async function () {
         if (!downloadReady) return;
-        textOverlay.innerHTML = `
+        await setTextOverlayInner(`
 <p>This image has been discarded</p>
 <p>You can now change the image or run another model</p>
 <p>Right now the image can still be downloaded</p>
-`;
+`);
         downloaded = true;
     });
 
