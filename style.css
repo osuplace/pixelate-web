@@ -118,3 +118,7 @@ button[disabled]:hover {
         flex-direction: column;
     }
 }
+
+option:disabled, option[disabled] {
+    color: #eee;
+}

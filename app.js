@@ -134,6 +134,7 @@ async function init(userModel = null, modelName = null) {
         newOption.value = modelName;
         newOption.textContent = `Local file: ${modelName}`;
         newOption.selected = true;
+        newOption.setAttribute('data-saveas', modelName);
         modelDropdown.appendChild(newOption);
     }
 
@@ -423,8 +424,9 @@ document.addEventListener("DOMContentLoaded", async function () {
     setDownloadButtonsDisabledTo(true);
     download4Button.addEventListener("click", async function () {
         if (!downloadReady) return;
+        const selectedModel = modelDropdown.options[modelDropdown.selectedIndex].getAttribute('data-saveas');
         const link = document.createElement("a");
-        link.download = currentFile.name.replace(/\.[^/.]+$/, "") + "_4x_pixelated.png";
+        link.download = `${currentFile.name.replace(/\.[^/.]+$/, "")}_4x_${selectedModel}.png`;
         link.href = mainCanvas.toDataURL();
         link.click();
         downloaded = true;
@@ -438,8 +440,9 @@ document.addEventListener("DOMContentLoaded", async function () {
         const downscaleCtx = downscaleCanvas.getContext("2d");
         downscaleCtx.drawImage(mainCanvas, 0, 0, mainCanvas.width, mainCanvas.height, 0, 0, downscaleCanvas.width, downscaleCanvas.height);
 
+        const selectedModel = modelDropdown.options[modelDropdown.selectedIndex].getAttribute('data-saveas');
         const link = document.createElement("a");
-        link.download = currentFile.name.replace(/\.[^/.]+$/, "") + "_pixelated.png";
+        link.download = `${currentFile.name.replace(/\.[^/.]+$/, "")}_${selectedModel}.png`;
         link.href = downscaleCanvas.toDataURL();
         link.click();
         downloaded = true;

@@ -21,11 +21,10 @@
         <label for="model-dropdown">Select model:</label>
         <select id="model-dropdown">
             <option selected="selected" disabled="disabled" hidden="hidden">Select a model</option>
-            <option value="1x_pixelate4x-v5-270k_G.onnx">Version 5 at 270k iter</option>
-            <option value="1x_pixelate4x-v5-340k_G.onnx">Version 5 at 340k iter</option>
-            <option value="1x_pixelate4x-v6-140k_G.onnx">Version 6 at 140k iter</option>
-            <option value="1x_pixelate4x-v6-180k_G.onnx">Version 6 at 180k iter</option>
-            <option value="1x_pixelate4x-nf24nb6v1-109k_G.onnx">Tiny model - Version 1 at 109k iter</option>
+            <option disabled="disabled">Hover for more info</option>
+            <option value="1x_pixelate4x-v5-340k_G.onnx" data-saveas="phoebe" title="Version 5 at 340k iter - Preserves original palette">🖼️🐌 Phoebe</option>
+            <option value="1x_pixelate4x-v6-180k_G.onnx" data-saveas="maia" title="Version 6 at 180k iter - Restricts palette">🎨🐌 Maia</option>
+            <option value="1x_pixelate4x-nf24nb6v1-109k_G.onnx" data-saveas="pyxis" title="Tiny model - Version 1 at 109k iter - Good for CPU (and Firefox users), very fast on GPU - Restricts palette">🎨🔥 Pyxis</option>
         </select>
     </div>
     <div class="control-group">
