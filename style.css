@@ -88,14 +88,14 @@ input[type="range"] {
 }
 
 button {
-    background-color: #4CAF50;
+    background-color: #3d993d;
     color: white;
     cursor: pointer;
     transition: background-color 0.3s;
 }
 
 button.danger {
-    background-color: #f44336;
+    background-color: #e0392d;
 }
 
 button:disabled,
@@ -105,12 +105,16 @@ button[disabled] {
 }
 
 button:hover {
-    background-color: #45a049;
+    background-color: #58cc5c;
+}
+
+button.danger:hover {
+    background-color: #ff4d4d;
 }
 
 button:disabled:hover,
 button[disabled]:hover {
-    background-color: #ccc;
+    background-color: #737373;
 }
 
 @media (max-width: 600px) {

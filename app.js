@@ -32,8 +32,8 @@ const fileInput = document.getElementById("file-input")
 const canvasContainer = document.getElementById('canvas-container');
 
 
-let maxTileSize = 392; // size of the tiles to process
-let overlap = 8; // overlap between tiles
+let maxTileSize = 440; // size of the tiles to process
+let overlap = 24; // overlap between tiles
 
 function setDownloadButtonsDisabledTo(disabled) {
     download1Button.disabled = disabled;
@@ -48,10 +48,10 @@ async function sleep(ms) {
 async function setTextOverlayInner(newHtml, updateVisibility = true) {
     if (newHtml && updateVisibility && textOverlay.hidden) {
         textOverlay.hidden = false;
-        await sleep(30);
+        await sleep(50);
     } else if (newHtml.length === 0 && updateVisibility && !textOverlay.hidden) {
         textOverlay.hidden = true;
-        await sleep(30);
+        await sleep(50);
     }
     textOverlay.innerHTML = newHtml;
     await sleep(1);
@@ -67,6 +67,7 @@ class TextOverlayPercentageScheduler {
     async start(currentPercentage, speed) {
         this.current = currentPercentage;
         this.speed = speed;
+        await setTextOverlayInner(" ")  // this is to clear the hidden attribute
 
         while (this.speed === 0) {
             await setTextOverlayInner(`<p>${this.current}%</p>`)
@@ -74,7 +75,7 @@ class TextOverlayPercentageScheduler {
         }
 
         this.running = true;
-        await setTextOverlayInner(`<p>${this.current}%</p>`)
+        await setTextOverlayInner(`<p>${this.current}%</p>`, false);
 
         while (this.current < 100) {
             await sleep(this.speed);
@@ -157,7 +158,7 @@ async function init(userModel = null, modelName = null) {
             });
             console.debug(`Session created with ${ep}`);
             if (!ep.includes("webgpu")) {
-                disclaimer.innerHTML = "<p>WebGPU is not supported in your browser. Please download <a href=\"https://chainner.app/\">chaiNNer</a> to run the model offline.</p>"
+                disclaimer.innerHTML = "<p>⚠️ WebGPU failed. Model is running on CPU - this can cause performance issues.</p>"
             }
             await setTextOverlayInner(defaultOverlayText);
             break
@@ -316,6 +317,7 @@ async function runCurrentFile() {
     let speed = totalArea / 100 * estimatedTimePerPixel;
     let percentageScheduler = new TextOverlayPercentageScheduler();
     if (totalCount !== 1 || speed !== 0) {
+        // deliberately sync call, do not await as it will block all the code after from running
         percentageScheduler.start(0, speed).catch(console.error);
     } else {
         await setTextOverlayInner("<p>Pixelating...</p>");
