@@ -45,7 +45,14 @@ async function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function setTextOverlayInner(newHtml) {
+async function setTextOverlayInner(newHtml, updateVisibility = true) {
+    if (newHtml && updateVisibility && textOverlay.hidden) {
+        textOverlay.hidden = false;
+        await sleep(30);
+    } else if (newHtml.length === 0 && updateVisibility && !textOverlay.hidden) {
+        textOverlay.hidden = true;
+        await sleep(30);
+    }
     textOverlay.innerHTML = newHtml;
     await sleep(1);
 }
@@ -72,7 +79,7 @@ class TextOverlayPercentageScheduler {
         while (this.current < 100) {
             await sleep(this.speed);
             this.current += 1;
-            await setTextOverlayInner(`<p>${this.current}%</p>`)
+            await setTextOverlayInner(`<p>${this.current}%</p>`, false);
             if (!this.running) {
                 await setTextOverlayInner("");
                 return;
@@ -84,7 +91,7 @@ class TextOverlayPercentageScheduler {
         console.debug(`Updating percentage: ${currentPercentage}, Speed: ${speed}`);
         this.current = currentPercentage;
         this.speed = speed;
-        await setTextOverlayInner(`<p>${this.current}%</p>`)
+        await setTextOverlayInner(`<p>${this.current}%</p>`, false);
     }
 
     stop() {
@@ -256,6 +263,18 @@ async function prepareCurrentFile() {
     runButton.disabled = false;
 }
 
+async function drawFileNotPixelated() {
+    if (!currentFile) {
+        console.error("No file selected");
+        return;
+    }
+    const bitmap = await createImageBitmap(currentFile);
+    const ctx = mainCanvas.getContext("2d");
+    mainCanvas.width = bitmap.width;
+    mainCanvas.height = bitmap.height;
+    ctx.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height, 0, 0, mainCanvas.width, mainCanvas.height);
+}
+
 async function runCurrentFile() {
     if (!filePrepared) {
         console.error("File not prepared");
@@ -370,7 +389,11 @@ async function handleFileUpload(file) {
         downloadReady = false;
         downloaded = false;
 
-        await prepareCurrentFile();
+        if (!session) {
+            await drawFileNotPixelated();
+        } else {
+            await prepareCurrentFile();
+        }
     }
     // handle .onnx file upload
     else if (file.name.endsWith(".onnx")) {
@@ -403,7 +426,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         if (downloadReady && !downloaded) {
             setTextOverlayInner("<p>Please download the image before running another image.</p>").catch(console.error);
             return;
-        } else {
+        } else if (session) {
             setTextOverlayInner(defaultOverlayText).catch(console.error);
         }
         fileInput.click();
