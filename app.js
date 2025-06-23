@@ -11,6 +11,8 @@ let downloaded = false;
 let running = false;
 let alreadyDownloadedModels = {}
 let estimatedTimePerPixel = 0;
+let currentModelSize = 0; // size of the model in bytes
+let runningExecutionProvider = "";
 
 // Get the elements from the DOM
 const disclaimer = document.getElementById("disclaimer");
@@ -67,7 +69,12 @@ class TextOverlayPercentageScheduler {
     async start(currentPercentage, speed) {
         this.current = currentPercentage;
         this.speed = speed;
-        await setTextOverlayInner(" ")  // this is to clear the hidden attribute
+        textOverlay.hidden = false;
+
+        if (runningExecutionProvider.includes('cpu')) {
+            // wasm and cpu will block the event loop, no need to start the scheduler
+            return;
+        }
 
         while (this.speed === 0) {
             await setTextOverlayInner(`<p>${this.current}%</p>`)
@@ -92,7 +99,9 @@ class TextOverlayPercentageScheduler {
         console.debug(`Updating percentage: ${currentPercentage}, Speed: ${speed}`);
         this.current = currentPercentage;
         this.speed = speed;
-        await setTextOverlayInner(`<p>${this.current}%</p>`, false);
+        if (!this.running) {
+            await setTextOverlayInner(`<p>${currentPercentage}%</p>`, false);
+        }
     }
 
     stop() {
@@ -116,6 +125,10 @@ async function init(userModel = null, modelName = null) {
     }
 
     // Initialize the session
+    if (currentModelSize !== 0) {
+        estimatedTimePerPixel = estimatedTimePerPixel / currentModelSize; // reset the estimated time per pixel
+    }
+
     let modelBuffer = userModel;
     if (!modelBuffer) {
         await setTextOverlayInner("<p>Downloading model...</p>");
@@ -146,7 +159,10 @@ async function init(userModel = null, modelName = null) {
         modelDropdown.appendChild(newOption);
     }
 
-    const eps = [["webnn", "webgpu"], ["wasm"], ["cpu"]];
+    currentModelSize = modelBuffer.byteLength;
+    estimatedTimePerPixel = estimatedTimePerPixel * currentModelSize; // new ETA based on the new model size
+
+    const eps = [["webnn", "webgpu"], ["wasm", "cpu"]];
 
     await setTextOverlayInner("<p>Loading model...</p>");
 
@@ -157,6 +173,7 @@ async function init(userModel = null, modelName = null) {
                 graphOptimizationLevel: "all",
             });
             console.debug(`Session created with ${ep}`);
+            runningExecutionProvider = ep.join(", ");
             if (!ep.includes("webgpu")) {
                 disclaimer.innerHTML = "<p>⚠️ WebGPU failed. Model is running on CPU - this can cause performance issues.</p>"
             }
