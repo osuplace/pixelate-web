@@ -22,9 +22,26 @@
         <select id="model-dropdown">
             <option selected="selected" disabled="disabled" hidden="hidden">Select a model</option>
             <option disabled="disabled">Hover for more info</option>
-            <option value="1x_pixelate4x-v5-340k_G.onnx" data-saveas="phoebe" title="Version 5 at 340k iter - Preserves original palette">🖼️🐌 Phoebe</option>
-            <option value="1x_pixelate4x-v6-180k_G.onnx" data-saveas="maia" title="Version 6 at 180k iter - Restricts palette">🎨🐌 Maia</option>
-            <option value="1x_pixelate4x-nf24nb6v1-205k_G.onnx" data-saveas="pyxis" title="Tiny model - Version 1 at 205k iter - Good for CPU (and Firefox users), very fast on GPU - Restricts palette">🎨🔥 Pyxis</option>
+            <option value="1x_pixelate4x-v5-340k_G.onnx"
+                    data-saveas="phoebe"
+                    title="Preserves original palette - Version 5 at 340k iter">
+                🖼️🐌 Phoebe
+            </option>
+            <option value="1x_pixelate4x-v6-180k_G.onnx"
+                    data-saveas="maia"
+                    title="Restricts palette - Version 6 at 180k iter">
+                🎨🐌 Maia
+            </option>
+            <option value="1x_pixelate4x-nf24nb6-sandra-478k_G.onnx"
+                    data-saveas="sandra"
+                    title="Adds outlines while preserving original palette - Version 1 at 478k iter - Tiny model - Good for CPU (and Firefox users), very fast on GPU">
+                🖼️🔥 Sandra
+            </option>
+            <option value="1x_pixelate4x-nf24nb6v1-205k_G.onnx"
+                    data-saveas="pyxis"
+                    title="Restricts palette but has trouble with skin tones - Version 1 at 205k iter - Tiny model - Good for CPU (and Firefox users), very fast on GPU">
+                🎨🔥 Pyxis
+            </option>
         </select>
     </div>
     <div class="control-group">
@@ -45,7 +62,9 @@
     </div>
 </div>
 <div id="text-overlay">
-    <p>To begin - Select a model from bottom left dropdown</p><p>or</p><p>Upload SR model in .onnx format</p>
+    <p>To begin - Select a model from bottom left dropdown</p>
+    <p>or</p>
+    <p>Upload SR model in .onnx format</p>
 </div>
 <input type="file" id="file-input" accept="image/*" class="hidden"/>
 </body>
