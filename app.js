@@ -454,7 +454,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         const files = event.target.files;
         await handleFileUpload(files[0]);
     })
-    scaleRange.addEventListener("change", async function (_) {
+    scaleRange.addEventListener("input", async function (_) {
         scaleNumber.value = scaleRange.value;
         await prepareCurrentFile()  // TODO: debounce this
     })
