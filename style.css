@@ -126,3 +126,7 @@ button[disabled]:hover {
 option:disabled, option[disabled] {
     color: #eee;
 }
+
+option.legacy {
+    color: #aaa;
+}
