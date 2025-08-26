@@ -35,7 +35,7 @@ const canvasContainer = document.getElementById('canvas-container');
 
 
 let maxTileSize = 440; // size of the tiles to process
-let overlap = 24; // overlap between tiles
+let overlap = 40; // overlap between tiles
 
 function setDownloadButtonsDisabledTo(disabled) {
     download1Button.disabled = disabled;
@@ -369,8 +369,8 @@ async function runCurrentFile() {
             let imageBitmap = await createImageBitmap(imageData);
             console.debug("Converted to ImageBitmap: ", imageBitmap);
             // draw the output on the canvas
-            let xOffset = i === 0 ? 0 : overlap;
-            let yOffset = j === 0 ? 0 : overlap;
+            let xOffset = i === 0 ? 0 : Math.floor(overlap / 2);
+            let yOffset = j === 0 ? 0 : Math.floor(overlap / 2);
             ctx.drawImage(imageBitmap, xOffset, yOffset, width, height, x1 + xOffset, y1 + yOffset, width, height);
             await sleep(10);
         }
