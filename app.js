@@ -500,6 +500,9 @@ document.addEventListener("DOMContentLoaded", async function () {
     });
 
     modelDropdown.addEventListener("change", async function (_) {
+        let currentURL = new URL(window.location.href);
+        currentURL.searchParams.set("model", modelDropdown.options[modelDropdown.selectedIndex].getAttribute('data-saveas'));
+        history.pushState({}, '', currentURL);
         await init();
     })
 
@@ -508,6 +511,16 @@ document.addEventListener("DOMContentLoaded", async function () {
             event.preventDefault();
         }
     })
+
+    let modelFromParams = new URLSearchParams(window.location.search).get("model");
+    if (modelFromParams) {
+        // select that model from the dropdown
+        let modelOption = modelDropdown.querySelector(`option[data-saveas="${modelFromParams}"]`);
+        if (modelOption) {
+            modelOption.selected = true;
+            await init();
+        }
+    }
 });
 
 
