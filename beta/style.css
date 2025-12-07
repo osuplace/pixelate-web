@@ -1,0 +1,133 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    text-wrap: nowrap;
+}
+
+body {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background-color: #111;
+    color: #eee;
+}
+
+a:link {
+    color: #8cb4ff;
+    text-decoration: none;
+}
+
+a:visited {
+    color: #c8a1ff;
+}
+
+
+#text-overlay {
+    position: absolute;
+    top: 40%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 30px;
+    pointer-events: none;
+    text-align: center;
+    /*noinspection CssNonIntegerLengthInPixels*/
+    text-shadow: #111 3px 0 0, #111 2.83px 0.98px 0, #111 2.35px 1.85px 0, #111 1.62px 2.52px 0, #111 0.70px 2.91px 0, #111 -0.28px 2.98px 0, #111 -1.24px 2.72px 0, #111 -2.07px 2.16px 0, #111 -2.66px 1.37px 0, #111 -2.96px 0.42px 0, #111 -2.94px -0.57px 0, #111 -2.59px -1.50px 0, #111 -1.96px -2.27px 0, #111 -1.11px -2.78px 0, #111 -0.13px -2.99px 0, #111 0.85px -2.87px 0, #111 1.74px -2.43px 0, #111 2.44px -1.73px 0, #111 2.88px -0.83px 0;
+}
+
+#canvas-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #111;
+    position: relative;
+    min-height: 200px;
+    overflow: hidden;
+    transition: background-color 0.5s;
+}
+
+canvas {
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+    display: block;
+}
+
+#controls-container {
+    padding: 15px;
+    background-color: #222;
+    border-top: 2px solid #444;
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.control-group {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+select, input[type="range"], button {
+    padding: 8px 12px;
+    border: 1px solid #666;
+    border-radius: 4px;
+    font-size: 14px;
+    background-color: #333;
+    color: #eee;
+}
+
+input[type="range"] {
+    width: 200px;
+    padding: 8px 0;
+}
+
+.hidden {
+    display: none;
+}
+
+button {
+    background-color: #3d993d;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+button.danger {
+    background-color: #e0392d;
+}
+
+button:disabled,
+button[disabled] {
+    background-color: #555;
+    cursor: not-allowed;
+}
+
+button:hover {
+    background-color: #58cc5c;
+}
+
+button.danger:hover {
+    background-color: #ff4d4d;
+}
+
+button:disabled:hover,
+button[disabled]:hover {
+    background-color: #737373;
+}
+
+@media (max-width: 600px) {
+    #controls-container {
+        flex-direction: column;
+    }
+}
+
+option:disabled, option[disabled] {
+    color: #eee;
+}
+
+option.legacy {
+    color: #aaa;
+}
