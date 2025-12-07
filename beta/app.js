@@ -4,6 +4,7 @@ let vertCombineSession = null;
 let horiCombineSession = null;
 let finalizerSession = null;
 let currentImageBitmap = null;
+let currentFileName = null;
 let desiredSize = 0;
 let outputCanvas = document.createElement("canvas");
 let filePrepared = false;
@@ -12,8 +13,8 @@ let downloaded = false;
 let running = false;
 let estimatedTimePerPixel = 0;
 let runningExecutionProvider = "";
-let loadedPaletteBlobs = {}
-let paletteTensor = null;
+let loadedPaletteTensors = {}
+let selectedPalette = null;
 
 // Get the elements from the DOM
 const disclaimer = document.getElementById("disclaimer");
@@ -36,7 +37,7 @@ const paletteInput = document.getElementById("palette-input")
 const canvasContainer = document.getElementById('canvas-container');
 
 let maxTileSize = 256; // size of the tiles to process
-let overlap = 32; // overlap between *input* tiles
+let overlap = 64; // overlap between *input* tiles
 
 function setDownloadButtonsDisabledTo(disabled) {
     download1Button.disabled = disabled;
@@ -67,6 +68,10 @@ class TextOverlayPercentageScheduler {
         this.speed = 0; // how long it takes for the percentage to increment
     }
 
+    /**
+     * @param {number} currentPercentage - The current percentage
+     * @param {number} speed - how long it takes for the percentage to increment
+     */
     async start(currentPercentage, speed) {
         this.current = currentPercentage;
         this.speed = speed;
@@ -83,6 +88,7 @@ class TextOverlayPercentageScheduler {
         }
 
         this.running = true;
+        console.log(`Starting percentage scheduler with speed ${this.speed}`);
         await setTextOverlayInner(`<p>${this.current}%</p>`, false);
 
         while (this.current < 100) {
@@ -96,6 +102,10 @@ class TextOverlayPercentageScheduler {
         }
     }
 
+    /**
+     * @param {number} currentPercentage - The current percentage
+     * @param {number} speed - how long it takes for the percentage to increment
+     */
     async update(currentPercentage, speed) {
         console.debug(`Updating percentage: ${currentPercentage}, Speed: ${speed}`);
         this.current = currentPercentage;
@@ -112,9 +122,27 @@ class TextOverlayPercentageScheduler {
 }
 
 async function runCurrentFile() {
-    if (!filePrepared) return;
-    if (running) return;
+    if (await checkProceedingWithFileDisabled()) return;
+    if (!filePrepared) {
+        await setTextOverlayInner(`
+<p>Please upload an image first</p>
+<p>Drag and drop an image here to upload</p>
+<p>or</p>
+<p>Click to select an image from your computer</p>
+`);
+        runButton.disabled = true;
+        return;
+    }
+    if (!selectedPalette) {
+        await setTextOverlayInner("<p>Please select a palette from the bottom-left dropdown first</p>");
+        runButton.disabled = true;
+        return;
+    }
+
     running = true;
+    downloadReady = false;
+    downloaded = false;
+    setDownloadButtonsDisabledTo(true);
     await setTextOverlayInner('Processing image...');
 
     const maxSize = scaleRange.max;
@@ -141,13 +169,21 @@ async function runCurrentFile() {
     ctx.drawImage(inputCanvas, 0, 0);
     ctx.imageSmoothingEnabled = false;
 
+    const percentageScheduler = new TextOverlayPercentageScheduler();
+    let totalArea = inputWidth * inputHeight;
+    let areaRemaining = totalArea;
+    let speed = totalArea * estimatedTimePerPixel / 100;
+
+    // deliberately sync call, do not await as it will block all the code after from running
+    percentageScheduler.start(0, speed).catch(console.error);
+
+
     let tileSize = Math.floor(maxTileSize / scale) * scale;
     let tileOverlap = Math.floor(overlap / scale) * scale;
     let halfTileSize = Math.floor(tileSize / scale / 2) * scale;
 
     let heightRemaining = inputHeight;
     let heightCombined = null
-
     while (heightRemaining > 0) {
         let widthRemaining = inputWidth;
         let widthCombined = null
@@ -156,14 +192,17 @@ async function runCurrentFile() {
         let lastVTile = (heightRemaining === tileHeight);
         if (heightRemaining - tileHeight + tileOverlap < halfTileSize && !lastVTile)
             tileHeight = halfTileSize;
+
+
         while (widthRemaining > 0) {
+            let startTime = Date.now();
+
             let tileWidth = Math.min(widthRemaining, tileSize);
             let lastHTile = (widthRemaining === tileWidth);
             if (widthRemaining - tileWidth + tileOverlap < halfTileSize && !lastHTile)
                 tileWidth = halfTileSize;
             let tileX = inputWidth - widthRemaining;
             let tileY = inputHeight - heightRemaining;
-
 
 
             let tileCanvas = document.createElement('canvas');
@@ -176,14 +215,34 @@ async function runCurrentFile() {
             let tileTensor = await ort.Tensor.fromImage(tileCtx.getImageData(0, 0, tileCanvas.width, tileCanvas.height))
             let tileOutput = await pixelateSession.run({
                 'image': tileTensor,
-                'palette': paletteTensor,
+                'palette': loadedPaletteTensors[selectedPalette],
                 'downscale_power': new ort.Tensor('int64', new BigInt64Array([BigInt(maxPossiblePower)]), [])
             });
             tileTensor.dispose();
+            let endTime = Date.now();
+            let elapsedTime = endTime - startTime;
+            let usefulWidth = tileWidth - (lastHTile ? 0 : tileOverlap);
+            let usefulHeight = tileHeight - (lastVTile ? 0 : tileOverlap);
+            let thisTimePerPixel = elapsedTime / (usefulWidth * usefulHeight);
+            areaRemaining -= usefulWidth * usefulHeight;
+
+            if (tileX === 0 && tileY === 0) {
+                // skip the very first tile, model initialization time is long
+            } else {
+                if (estimatedTimePerPixel === 0) {
+                    estimatedTimePerPixel = thisTimePerPixel;
+                } else {
+                    estimatedTimePerPixel = (estimatedTimePerPixel + thisTimePerPixel) / 2;
+                }
+            }
+
+            let newSpeed = totalArea * estimatedTimePerPixel / 100;
+            let currentProgress = Math.round(100 * (totalArea - areaRemaining) / totalArea);
+            await percentageScheduler.update(currentProgress, newSpeed);
 
             let finalOutput = await finalizerSession.run({
                 'probs': tileOutput['out_probs'],
-                'palette': paletteTensor,
+                'palette': loadedPaletteTensors[selectedPalette],
             });
 
             let imageBitmap = await createImageBitmap(finalOutput['image'].toImageData());
@@ -203,8 +262,7 @@ async function runCurrentFile() {
 
             widthRemaining -= tileWidth - tileOverlap
             console.log(`widthLeft: ${widthRemaining}`)
-            if (lastHTile) break;  // otherwise widthRemaining will always be tileOverlap
-            // TODO: update progress bar
+            if (lastHTile) break;
         }
         if (heightCombined === null)
             // noinspection JSSuspiciousNameCombination
@@ -223,7 +281,7 @@ async function runCurrentFile() {
     }
     let finalOutput = await finalizerSession.run({
         'probs': heightCombined,
-        'palette': paletteTensor,
+        'palette': loadedPaletteTensors[selectedPalette],
     });
     let imageData = finalOutput['image'].toImageData();
     console.log(imageData)
@@ -234,11 +292,15 @@ async function runCurrentFile() {
     outputCanvas.width = desiredWidth;
     outputCanvas.height = desiredHeight;
     let outputCtx = outputCanvas.getContext('2d');
-    outputCtx.drawImage(imageBitmap, 0, 0, desiredWidth, desiredHeight);
+    outputCtx.drawImage(imageBitmap, 0, 0);
     await setTextOverlayInner("");
+    downloadReady = true;
+    setDownloadButtonsDisabledTo(false);
+    running = false;
+    percentageScheduler.stop();
 }
 
-async function preventedFileUpload() {
+async function checkProceedingWithFileDisabled() {
     if (running) {
         return true;
     }
@@ -250,7 +312,7 @@ async function preventedFileUpload() {
 }
 
 async function handleFileUpload(file) {
-    if (await preventedFileUpload()) return;
+    if (await checkProceedingWithFileDisabled()) return;
 
     downloaded = false;
     downloadReady = false;
@@ -259,14 +321,16 @@ async function handleFileUpload(file) {
     await setTextOverlayInner('Loading image...');
 
     currentImageBitmap = await createImageBitmap(file);
+    currentFileName = file.name;
     let maxSize = Math.max(currentImageBitmap.width, currentImageBitmap.height);
     scaleRange.max = scaleNumber.max = maxSize;
     scaleRange.value = scaleNumber.value = Math.min(300, maxSize / 2);
-    await setTextOverlayInner(paletteTensor != null ? "" : "<p>Select a palette from the bottom-left dropdown</p>");
+    await setTextOverlayInner(selectedPalette != null ? "" : "<p>Select a palette from the bottom-left dropdown</p>");
     defaultOverlayText = ""
     await drawCurrentImage();
     filePrepared = true;
-    runButton.disabled = false;
+    if (selectedPalette)
+        runButton.disabled = false;
 }
 
 async function drawCurrentImage() {
@@ -298,8 +362,16 @@ async function loadOrFetchPalette(userPalette = null, paletteName = null) {
         return null;
     }
 
+    if (!userPalette && paletteName) {
+        let cachedTensor = loadedPaletteTensors[paletteName]
+        if (cachedTensor) {
+            selectedPalette = paletteName;
+            return;
+        }
+    }
+
     // use the most optimal way to get the palette blob
-    let paletteBlob = userPalette || loadedPaletteBlobs[paletteName]
+    let paletteBlob = userPalette
     if (!paletteBlob) {
         let paletteResponse = await fetch(`./palettes/${paletteName}.png`);
         if (!paletteResponse.ok) {
@@ -308,9 +380,6 @@ async function loadOrFetchPalette(userPalette = null, paletteName = null) {
         }
         paletteBlob = await paletteResponse.blob();
     }
-
-    // cache the palette blob
-    loadedPaletteBlobs[paletteName] = paletteBlob;
 
     // create canvas to later get ImageData from
     const imageBitmap = await createImageBitmap(paletteBlob);
@@ -324,7 +393,11 @@ async function loadOrFetchPalette(userPalette = null, paletteName = null) {
     const tensor = await ort.Tensor.fromImage(ctx.getImageData(0, 0, canvas.width, canvas.height))
     console.log(`Loaded palette ${paletteName} with shape ${tensor.dims}`);
     await setTextOverlayInner(defaultOverlayText)
-    paletteTensor = tensor.reshape([1, 3, canvas.height * canvas.width]);
+    loadedPaletteTensors[paletteName] = tensor.reshape([1, 3, canvas.height * canvas.width]);
+    selectedPalette = paletteName;
+    if (filePrepared) {
+        runButton.disabled = false
+    }
 }
 
 async function initializeModel(url, eps = [["webnn", "webgpu"], ["wasm", "cpu"]]) {
@@ -362,19 +435,23 @@ async function initializeModel(url, eps = [["webnn", "webgpu"], ["wasm", "cpu"]]
 }
 
 async function initializeAllModels() {
-    pixelateSession = await initializeModel('./onnx/model.onnx')
-    vertCombineSession = await initializeModel('./onnx/vertical_overlap.onnx', [["wasm", "cpu"]])
-    horiCombineSession = await initializeModel('./onnx/horizontal_overlap.onnx', [["wasm", "cpu"]])
-    finalizerSession = await initializeModel('./onnx/image_finalizer.onnx')
+    pixelateSession = await initializeModel('./onnx/model202512072034.onnx')
+    vertCombineSession = await initializeModel('./onnx/vertical_overlap.onnx')
+    horiCombineSession = await initializeModel('./onnx/horizontal_overlap.onnx')
+    // finalizer has to live on CPU, otherwise switching palettes doesn't work
+    finalizerSession = await initializeModel('./onnx/image_finalizer.onnx', [["wasm", "cpu"]])
 }
 
 document.addEventListener("DOMContentLoaded", async function () {
+    setDownloadButtonsDisabledTo(true);
+    runButton.disabled = true;
     // prevent leaving the page if the model is running
     window.addEventListener('beforeunload', function (event) {
         if (running || downloadReady && !downloaded) {
             event.preventDefault();
         }
     })
+
 
     // button events
     runButton.addEventListener("click", async function () {
@@ -388,7 +465,39 @@ document.addEventListener("DOMContentLoaded", async function () {
         scaleRange.value = scaleNumber.value;
         await drawCurrentImage()  // TODO: debounce this
     })
-    // TODO: handle download buttons
+    download1Button.addEventListener("click", async function () {
+        if (!downloadReady) return;
+        const selectedPalette = paletteDropdown.options[paletteDropdown.selectedIndex].value;
+        const link = document.createElement("a");
+        link.download = `${currentFileName.replace(/\.[^/.]+$/, "")}_1x_${selectedPalette}.png`;
+        link.href = outputCanvas.toDataURL();
+        link.click();
+        downloaded = true;
+    });
+    download4Button.addEventListener("click", async function () {
+        if (!downloadReady) return;
+        const selectedPalette = paletteDropdown.options[paletteDropdown.selectedIndex].value;
+        const link = document.createElement("a");
+        link.download = `${currentFileName.replace(/\.[^/.]+$/, "")}_4x_${selectedPalette}.png`;
+        let canvas = document.createElement("canvas");
+        canvas.width = outputCanvas.width * 4;
+        canvas.height = outputCanvas.height * 4;
+        let ctx = canvas.getContext("2d");
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(outputCanvas, 0, 0, outputCanvas.width, outputCanvas.height, 0, 0, canvas.width, canvas.height);
+        link.href = canvas.toDataURL();
+        link.click();
+        downloaded = true;
+    })
+    downloadDButton.addEventListener("click", async function () {
+        if (!downloadReady) return;
+        await setTextOverlayInner(`
+<p>This image has been discarded</p>
+<p>You can now change the image or run another model</p>
+<p>Right now the image can still be downloaded</p>
+`);
+        downloaded = true;
+    });
 
 
     // file input via drag and drop
@@ -409,7 +518,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     // file input via click
     canvasContainer.addEventListener('click', async function (_) {
-        if (await preventedFileUpload()) return;
+        if (await checkProceedingWithFileDisabled()) return;
         fileInput.click();
     });
     fileInput.addEventListener("change", async function (event) {
@@ -437,10 +546,10 @@ document.addEventListener("DOMContentLoaded", async function () {
     // palette input via dropdown
     paletteDropdown.addEventListener("change", async function (_) {
         let currentURL = new URL(window.location.href);
-        let selectedPalette = paletteDropdown.options[paletteDropdown.selectedIndex].value;
-        currentURL.searchParams.set("palette", selectedPalette);
+        let selectedPalette = paletteDropdown.options[paletteDropdown.selectedIndex];
+        currentURL.searchParams.set("palette", selectedPalette.value);
         history.pushState({}, '', currentURL);
-        await loadOrFetchPalette(null, selectedPalette);
+        await loadOrFetchPalette(null, selectedPalette.value);
     })
 
     // functions to run after load
@@ -459,25 +568,23 @@ document.addEventListener("DOMContentLoaded", async function () {
     }
     // model initialization
     await initializeAllModels();
-
 })
 
 
 /* TODO:
-[ ] - Tiling (based on session memory)
-[ ] - Nearest neighbor preview before running the model
+[x] - Tiling (based on session memory)
+[x] - Nearest neighbor preview before running the model
 [ ] - real-time preview & debounce the preview
-[ ] - allow upload of palettes
-[ ] - Add a button to run the model
-[ ] - Download button for the output image
-[ ] - slider for the scale factor
+[x] - allow upload of palettes
+[x] - Add a button to run the model
+[x] - Download button for the output image
+[x] - slider for the scale factor
 [x] - dropdown for the palette
-[ ] - drag and drop support
-[ ] - Add loading indicator during model processing
+[x] - drag and drop support
+[x] - Add loading indicator during model processing
 [ ] - Implement error handling for failed model runs
-[ ] - Add image size validation and warnings
+[x] - Add image size validation and warnings
 [ ] - Add keyboard shortcuts for common actions
 [ ] - Save user preferences in local storage
-[ ] - Implement progress bar for large images
-[ ] - Create shareable URLs for specific settings
+[.] - Create shareable URLs for specific settings
  */
