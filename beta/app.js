@@ -166,11 +166,17 @@ async function runCurrentFile() {
     inputCtx.drawImage(currentImageBitmap, 0, 0, inputWidth, inputHeight);
 
     // tiling
-    mainCanvas.width = inputWidth;
-    mainCanvas.height = inputHeight;
+    let previewWScale = currentImageBitmap.width / inputWidth;
+    let previewHScale = currentImageBitmap.height / inputHeight;
+    mainCanvas.width = currentImageBitmap.width;
+    mainCanvas.height = currentImageBitmap.height;
     let ctx = mainCanvas.getContext("2d");
     // draw the image, then disable image smoothing
-    ctx.drawImage(inputCanvas, 0, 0);
+    ctx.drawImage(
+        inputCanvas,
+        0, 0, inputWidth, inputHeight,
+        0, 0, currentImageBitmap.width, currentImageBitmap.height
+    );
     ctx.imageSmoothingEnabled = false;
 
     const percentageScheduler = new TextOverlayPercentageScheduler();
@@ -250,7 +256,11 @@ async function runCurrentFile() {
             });
 
             let imageBitmap = await createImageBitmap(finalOutput['image'].toImageData());
-            ctx.drawImage(imageBitmap, 0, 0, tileWidth / scale, tileHeight / scale, tileX, tileY, tileWidth, tileHeight);
+            ctx.drawImage(
+                imageBitmap,
+                0, 0, tileWidth / scale, tileHeight / scale,
+                tileX * previewWScale, tileY * previewHScale, tileWidth * previewWScale, tileHeight * previewHScale
+            );
 
             if (widthCombined === null)
                 widthCombined = tileOutput['out_probs']
@@ -290,8 +300,12 @@ async function runCurrentFile() {
     let imageData = finalOutput['image'].toImageData();
     console.log(imageData)
     let imageBitmap = await createImageBitmap(imageData);
-    ctx.clearRect(0, 0, inputWidth, inputHeight);
-    ctx.drawImage(imageBitmap, 0, 0, desiredWidth, desiredHeight, 0, 0, inputWidth, inputHeight);
+    ctx.clearRect(0, 0, currentImageBitmap.width, currentImageBitmap.height);
+    ctx.drawImage(
+        imageBitmap,
+        0, 0, desiredWidth, desiredHeight,
+        0, 0, currentImageBitmap.width, currentImageBitmap.height
+    );
 
     outputCanvas.width = desiredWidth;
     outputCanvas.height = desiredHeight;
@@ -439,7 +453,7 @@ async function initializeModel(url, eps = [["webnn", "webgpu"], ["wasm", "cpu"]]
 }
 
 async function initializeAllModels() {
-    pixelateSession = await initializeModel('./onnx/model202512072034.onnx')
+    pixelateSession = await initializeModel('./onnx/model202512072323.onnx')
     vertCombineSession = await initializeModel('./onnx/vertical_overlap.onnx')
     horiCombineSession = await initializeModel('./onnx/horizontal_overlap.onnx')
     // finalizer has to live on CPU, otherwise switching palettes doesn't work
