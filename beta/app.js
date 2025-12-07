@@ -138,6 +138,10 @@ async function runCurrentFile() {
         runButton.disabled = true;
         return;
     }
+    if (!finalizerSession) {
+        await setTextOverlayInner("<p>Wait for the model to finish loading</p>");
+        return
+    }
 
     running = true;
     downloadReady = false;
@@ -440,6 +444,8 @@ async function initializeAllModels() {
     horiCombineSession = await initializeModel('./onnx/horizontal_overlap.onnx')
     // finalizer has to live on CPU, otherwise switching palettes doesn't work
     finalizerSession = await initializeModel('./onnx/image_finalizer.onnx', [["wasm", "cpu"]])
+    runButton.innerText = "✨ Pixelate ✨"
+    await setTextOverlayInner(defaultOverlayText)
 }
 
 document.addEventListener("DOMContentLoaded", async function () {
