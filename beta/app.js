@@ -19,7 +19,6 @@ let selectedPalette = null;
 // Get the elements from the DOM
 const disclaimer = document.getElementById("disclaimer");
 const textOverlay = document.getElementById("text-overlay");
-let defaultOverlayText = "<p>Drag and drop an image here to upload</p><p>or</p><p>Click to select an image from your computer</p>";
 
 const paletteDropdown = document.getElementById("palette-dropdown");
 const scaleRange = document.getElementById("scale-range");
@@ -59,6 +58,17 @@ async function setTextOverlayInner(newHtml, updateVisibility = true) {
     }
     textOverlay.innerHTML = newHtml;
     await sleep(1);
+}
+
+async function setTextOverlayToDefault() {
+    if (!selectedPalette)
+        await setTextOverlayInner("<p>Select a palette from the bottom-left dropdown</p>");
+    else if (!currentImageBitmap)
+        await setTextOverlayInner("<p>Drag and drop an image here to upload</p><p>or</p><p>Click to select an image from your computer</p>");
+    else if (!finalizerSession)
+        await setTextOverlayInner("<p>Wait for the model to finish loading</p>");
+    else
+        await setTextOverlayInner("");
 }
 
 class TextOverlayPercentageScheduler {
@@ -147,6 +157,8 @@ async function runCurrentFile() {
     downloadReady = false;
     downloaded = false;
     setDownloadButtonsDisabledTo(true);
+    runButton.innerText = "❌ Cancel ❌"
+    runButton.classList.add("danger");
     await setTextOverlayInner('Processing image...');
 
     const maxSize = scaleRange.max;
@@ -187,6 +199,11 @@ async function runCurrentFile() {
     // deliberately sync call, do not await as it will block all the code after from running
     percentageScheduler.start(0, speed).catch(console.error);
 
+    let cancelled = async () => {
+        percentageScheduler.stop();
+        await setTextOverlayInner("Cancelled.");
+    }
+
 
     let tileSize = Math.floor(maxTileSize / scale) * scale;
     let tileOverlap = Math.floor(overlap / scale) * scale;
@@ -194,23 +211,23 @@ async function runCurrentFile() {
 
     let heightRemaining = inputHeight;
     let heightCombined = null
-    while (heightRemaining > 0) {
+    while (heightRemaining > 0 && running) {
         let widthRemaining = inputWidth;
         let widthCombined = null
 
         let tileHeight = Math.min(heightRemaining, tileSize);
         let lastVTile = (heightRemaining === tileHeight);
         if (heightRemaining - tileHeight + tileOverlap < halfTileSize && !lastVTile)
-            tileHeight = halfTileSize;
+            tileHeight = Math.floor(heightRemaining / 2 / scale) * scale;
 
 
-        while (widthRemaining > 0) {
+        while (widthRemaining > 0 && running) {
             let startTime = Date.now();
 
             let tileWidth = Math.min(widthRemaining, tileSize);
             let lastHTile = (widthRemaining === tileWidth);
             if (widthRemaining - tileWidth + tileOverlap < halfTileSize && !lastHTile)
-                tileWidth = halfTileSize;
+                tileWidth = Math.floor(widthRemaining / 2 / scale) * scale;
             let tileX = inputWidth - widthRemaining;
             let tileY = inputHeight - heightRemaining;
 
@@ -278,6 +295,7 @@ async function runCurrentFile() {
             console.log(`widthLeft: ${widthRemaining}`)
             if (lastHTile) break;
         }
+        if (!running) return await cancelled()
         if (heightCombined === null)
             // noinspection JSSuspiciousNameCombination
             heightCombined = widthCombined
@@ -293,6 +311,9 @@ async function runCurrentFile() {
         heightRemaining -= tileHeight - tileOverlap
         if (lastVTile) break;
     }
+    if (!running) return await cancelled()
+    percentageScheduler.stop();
+    await setTextOverlayInner("Removing seams");
     let finalOutput = await finalizerSession.run({
         'probs': heightCombined,
         'palette': loadedPaletteTensors[selectedPalette],
@@ -311,11 +332,13 @@ async function runCurrentFile() {
     outputCanvas.height = desiredHeight;
     let outputCtx = outputCanvas.getContext('2d');
     outputCtx.drawImage(imageBitmap, 0, 0);
-    await setTextOverlayInner("");
     downloadReady = true;
     setDownloadButtonsDisabledTo(false);
     running = false;
-    percentageScheduler.stop();
+    runButton.innerText = "✨ Pixelate ✨"
+    runButton.classList.remove("danger");
+    await sleep(1000);
+    await setTextOverlayInner("");
 }
 
 async function checkProceedingWithFileDisabled() {
@@ -343,7 +366,7 @@ async function handleFileUpload(file) {
     let maxSize = Math.max(currentImageBitmap.width, currentImageBitmap.height);
     scaleRange.max = scaleNumber.max = maxSize;
     scaleRange.value = scaleNumber.value = Math.min(300, maxSize / 2);
-    await setTextOverlayInner(selectedPalette != null ? "" : "<p>Select a palette from the bottom-left dropdown</p>");
+    await setTextOverlayToDefault();
     defaultOverlayText = ""
     await drawCurrentImage();
     filePrepared = true;
@@ -410,9 +433,9 @@ async function loadOrFetchPalette(userPalette = null, paletteName = null) {
     // convert to Tensor and reshape to (B, C, N)
     const tensor = await ort.Tensor.fromImage(ctx.getImageData(0, 0, canvas.width, canvas.height))
     console.log(`Loaded palette ${paletteName} with shape ${tensor.dims}`);
-    await setTextOverlayInner(defaultOverlayText)
     loadedPaletteTensors[paletteName] = tensor.reshape([1, 3, canvas.height * canvas.width]);
     selectedPalette = paletteName;
+    await setTextOverlayToDefault()
     if (filePrepared) {
         runButton.disabled = false
     }
@@ -459,7 +482,7 @@ async function initializeAllModels() {
     // finalizer has to live on CPU, otherwise switching palettes doesn't work
     finalizerSession = await initializeModel('./onnx/image_finalizer.onnx', [["wasm", "cpu"]])
     runButton.innerText = "✨ Pixelate ✨"
-    await setTextOverlayInner(defaultOverlayText)
+    await setTextOverlayToDefault()
 }
 
 document.addEventListener("DOMContentLoaded", async function () {
@@ -475,7 +498,13 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     // button events
     runButton.addEventListener("click", async function () {
-        await runCurrentFile();
+        if (running) {
+            running = false;
+            runButton.innerText = "✨ Pixelate ✨"
+            runButton.classList.remove("danger");
+        } else {
+            await runCurrentFile();
+        }
     })
     scaleRange.addEventListener("input", async function (_) {
         scaleNumber.value = scaleRange.value;
