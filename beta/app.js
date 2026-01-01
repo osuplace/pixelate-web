@@ -338,7 +338,8 @@ async function runCurrentFile() {
     runButton.innerText = "✨ Pixelate ✨"
     runButton.classList.remove("danger");
     await sleep(1000);
-    await setTextOverlayInner("");
+    if (textOverlay.innerText === "Removing seams")
+        await setTextOverlayInner("");
 }
 
 async function checkProceedingWithFileDisabled() {
